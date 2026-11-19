@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>益智算数游戏</title>
+<style>
+  :root {
+    --bg-color: #fff5f8;
+    --bg-gradient: radial-gradient(circle at 50% 0%, #ffe3ec 0%, #fff5f8 60%, #fffcfc 100%);
+    --grid-border: #ffd1dc;
+    --grid-bg: #ffffff;
+    --text-color: #ff4d79;
+
+    --select-bg: #fff0f5;
+    --select-border: #ff6b9d;
+
+    --btn-bg: #ffffff;
+    --btn-text: #ff4d79;
+    --btn-border: #ffd1dc;
+  }
+
+  * { box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    margin: 0; padding: 20px 0 30px 0; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    background: var(--bg-gradient);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* 顶部状态栏 */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    width: 100%; max-width: 420px; padding: 0 20px; margin-bottom: 5px;
+    font-size: 15px; color: #a87e8f;
+  }
+  .score-box { font-weight: bold; color: #ff4d79; font-size: 20px; }
+
+  .time-box { font-weight: bold; color: #ff6b9d; font-size: 18px; font-variant-numeric: tabular-nums; }
+  #pauseBtn { border:none; background:#ffe1ea; color:#ff4d79; border-radius:50%; width:30px; height:30px; font-size:15px; cursor:pointer; vertical-align:middle; margin-left:6px; transition:all .2s; }
+  #pauseBtn:hover { background:#ffd1dc; }
+  .time-bar-wrap {
+    width: calc(100% - 40px); max-width: 380px; height: 6px;
+    background: #ffe1ea; border-radius: 3px; overflow: hidden; margin-bottom: 12px;
+  }
+  .time-bar {
+    height: 100%; width: 0%; border-radius: 3px;
+    background: linear-gradient(90deg, #ff8fb0, #ff4d79);
+    transition: width 0.3s linear;
+  }
+
+  .target-area {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    margin-bottom: 10px; margin-top: 5px;
+  }
+  .target-label { font-size: 13px; color: #a87e8f; letter-spacing: 2px; }
+  .target-value {
+    font-size: 36px; font-weight: 800; color: #ff4d79; line-height: 1.1;
+    text-shadow: 0 2px 10px rgba(255, 77, 121, 0.2);
+    transition: transform 0.2s;
+  }
+  .target-value.pop-anim { transform: scale(1.3); }
+
+  /* 算式填空区：[框] [符号] [框] = 结果 */
+  .equation-bar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .eq-box {
+    width: 46px; height: 42px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; color: #ff4d79;
+    background: #fff; border: 2px solid var(--grid-border);
+    transition: all 0.2s; cursor: pointer;
+  }
+  .eq-box.filled {
+    border-color: var(--select-border);
+    background: var(--select-bg);
+    box-shadow: 0 0 0 3px rgba(255, 107, 157, 0.15);
+  }
+  .eq-box.placeholder { color: #d8b8c4; font-size: 20px; }
+  .eq-op {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #ff6b9d, #ff4d79);
+    box-shadow: 0 4px 12px rgba(255, 77, 121, 0.35);
+    cursor: pointer; user-select: none; transition: transform 0.15s;
+  }
+  .eq-op:active { transform: scale(0.9); }
+  .eq-equals { font-size: 24px; font-weight: 700; color: #a87e8f; }
+  .eq-result {
+    min-width: 46px; height: 42px; padding: 0 12px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, #ff6b9d, #ff4d79);
+    box-shadow: 0 4px 12px rgba(255, 77, 121, 0.35);
+  }
+
+  /* 规则提示 */
+  .rule-tip {
+    font-size: 13px; color: #a87e8f; text-align: center;
+    margin-bottom: 10px; line-height: 1.5; padding: 0 20px;
+  }
+  .rule-tip b { color: #ff6b9d; }
+
+  /* 开局规则弹窗 */
+  .rule-list {
+    text-align: left; margin: 0 0 20px 0; padding-left: 20px;
+    color: #a87e8f; font-size: 14px; line-height: 2;
+  }
+  .rule-list b { color: #ff4d79; }
+
+  /* 消息提示条 */
+  .message-bar {
+    height: 26px; margin-bottom: 12px; font-size: 15px; font-weight: bold;
+    color: #ff6b9d; text-align: center; transition: all 0.2s;
+  }
+  .message-bar.error { color: #ef4444; animation: shake 0.3s ease-in-out; }
+
+  /* 游戏网格容器 */
+  .game-container {
+    position: relative; background: var(--grid-bg);
+    border: 2px solid var(--grid-border); border-radius: 12px; padding: 2px;
+    box-shadow: 0 10px 25px rgba(255, 107, 157, 0.15);
+    transition: all 0.3s ease;
+  }
+
+  .grid {
+    display: grid; gap: 2px; background-color: var(--grid-border);
+    border-radius: 8px; overflow: hidden;
+  }
+
+  /* 数字格子 */
+  .cell {
+    width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 600; background-color: var(--grid-bg);
+    color: var(--text-color); cursor: pointer; position: relative;
+    transition: all 0.15s ease;
+  }
+
+  @media (max-width: 520px) {
+    .cell { width: 36px; height: 36px; font-size: 16px; }
+  }
+
+  .cell.selected {
+    background-color: var(--select-bg); color: var(--select-border);
+    box-shadow: inset 0 0 0 3px var(--select-border); border-radius: 4px;
+    transform: scale(0.95); z-index: 2;
+  }
+
+  .cell.matched {
+    background-color: transparent; color: transparent;
+    cursor: default; pointer-events: none; box-shadow: none; transform: none;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+  .cell.error { background-color: #ffe4e6; color: #e11d48; animation: shake 0.3s ease-in-out; }
+
+  @keyframes pop {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.8; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  .cell.pop { animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+  /* 底部按钮 */
+  .footer {
+    margin-top: 25px; display: flex; gap: 15px;
+  }
+
+  .action-btn {
+    padding: 0 20px; height: 48px; border-radius: 24px;
+    background-color: var(--btn-bg); border: 2px solid var(--btn-border);
+    color: var(--btn-text); font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 4px 15px rgba(255, 107, 157, 0.2);
+    transition: all 0.2s;
+  }
+  .action-btn:hover { background-color: #fff0f5; border-color: #ffb6c1; transform: translateY(-2px); }
+  .action-btn:active { transform: scale(0.95); }
+  .action-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* 弹窗遮罩 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(255, 245, 248, 0.7);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    backdrop-filter: blur(5px); z-index: 100;
+  }
+  .overlay.active { opacity: 1; pointer-events: auto; }
+
+  .modal {
+    background: white; padding: 30px; border-radius: 24px; text-align: center;
+    width: 80%; max-width: 320px; transform: translateY(20px) scale(0.9);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 20px 40px rgba(255, 107, 157, 0.15), 0 0 0 1px #ffd1dc;
+  }
+  .overlay.active .modal { transform: translateY(0) scale(1); }
+  .modal h2 { margin: 0 0 12px 0; font-size: 26px; color: #ff4d79; }
+  .modal p { margin: 0 0 24px 0; color: #a87e8f; font-size: 15px; line-height: 1.6; }
+  .modal button {
+    background: linear-gradient(135deg, #ff6b9d, #ff4d79); color: white;
+    border: none; padding: 14px 24px; border-radius: 14px;
+    font-size: 16px; font-weight: 600; cursor: pointer; width: 100%;
+    transition: all 0.2s; box-shadow: 0 6px 15px rgba(255, 77, 121, 0.3);
+  }
+  .modal button:hover { background: linear-gradient(135deg, #ff4d79, #e91e63); transform: translateY(-2px); }
+</style>
+<base target="_blank">
+</head>
+<body>
+
+  <div class="header">
+    <div>得分: <span class="score-box" id="score">0</span></div>
+    <div class="time-box">⏱ <span id="timer">00:00</span><button id="pauseBtn" title="暂停">⏸</button></div>
+    <div>剩余: <span id="status">0</span></div>
+  </div>
+
+  <div class="time-bar-wrap"><div class="time-bar" id="timeBar"></div></div>
+
+  <div class="target-area">
+    <div class="target-label">目 标 结 果</div>
+    <div class="target-value" id="targetVal">0</div>
+  </div>
+
+  <div class="equation-bar">
+    <div class="eq-box placeholder" id="eqA">?</div>
+    <div class="eq-op" id="eqOp">+</div>
+    <div class="eq-box placeholder" id="eqB">?</div>
+    <div class="eq-equals">=</div>
+    <div class="eq-result" id="eqResult">0</div>
+  </div>
+
+  <div class="rule-tip">💡 连线规则：<b>横、竖、斜都可以</b>，可以隔空，但<b>中间不能有数字挡住</b></div>
+
+  <div class="message-bar" id="msgBar">点击两个数字凑出目标（数字 1~10）</div>
+
+  <div class="game-container" id="gameContainer">
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="footer">
+    <button class="action-btn" id="addRowBtn" title="增加一行数字">+ 增加数字</button>
+    <button class="action-btn" id="changeTargetBtn" title="换一个目标">换目标</button>
+  </div>
+
+  <!-- 开局规则弹窗 / 结束弹窗（复用） -->
+  <div class="overlay active" id="overlay">
+    <div class="modal">
+      <h2 id="modalTitle">📖 玩法说明</h2>
+      <div id="modalBody">
+        <div class="rule-list">
+          <b>1.</b> 点击两个数字，用 <b>+ − × ÷</b> 凑出目标结果<br>
+          <b>2.</b> 连线方式：<b>横、竖、斜线</b> 都可以<br>
+          <b>3.</b> 可以隔空连线，但<b>中间不能有数字阻挡</b><br>
+          <b>4.</b> 运算方式<b>只有点击</b>中间符号才会切换，配对时按当前符号计算<br>
+          <b>5.</b> 目标一定能在盘面中凑出，放心连！<br>
+          <b>6.</b> ⏱ 本局限时 <b>6 分钟</b>，时间到了就会结束本局，慢慢来，争取在倒计时结束前清空所有数字～
+        </div>
+      </div>
+      <button id="restartBtn">开始游戏</button>
+    </div>
+  </div>
+
+  <!-- 暂停弹窗 -->
+  <div class="overlay" id="pauseOverlay">
+    <div class="modal">
+      <h2>⏸ 游戏已暂停</h2>
+      <p id="pauseMsg">当前用时：<b style="color:#ff4d79">00:00</b></p>
+      <button id="resumeBtn" style="margin-bottom:12px">继续游戏</button>
+      <button id="restartPauseBtn">重新开始</button>
+    </div>
+  </div>
+
+<script>
+/* ================= 游戏配置 ================= */
+const CONFIG = {
+  cols: 8,
+  initialRows: 9,
+  maxRows: 30,
+  minNumber: 1,       // 数字范围 1 ~ 10
+  maxNumber: 10,
+  minTarget: 2,       // 目标结果范围（1~10 的数用加减乘除可凑到 2~100）
+  maxTarget: 100,
+  timeLimit: 360      // 限时 6 分钟，超时即结束
+};
+
+/* ================= 状态管理 ================= */
+let grid = [];
+let selectedCell = null;
+let score = 0;
+let targetValue = 0;
+let isAnimating = false;
+let audioCtx = null;
+let startTime = 0;
+let timerInterval = null;
+let finalElapsed = 0;
+let gameActive = false;   // 游戏是否仍在进行（用于超时判定）
+let isPaused = false;     // 是否处于暂停
+let pausedTotal = 0;      // 累计暂停时长(ms)
+let pauseStart = 0;       // 本次暂停起始时刻(ms)
+
+/* ================= 音效合成 ================= */
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+function playSound(type) {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  if (type === 'click') {
+    osc.type = 'sine'; osc.frequency.setValueAtTime(800, t);
+    gain.gain.setValueAtTime(0.05, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+    osc.start(t); osc.stop(t + 0.05);
+  } else if (type === 'match') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, t);
+    osc.frequency.setValueAtTime(659.25, t + 0.08);
+    osc.frequency.setValueAtTime(783.99, t + 0.16);
+    gain.gain.setValueAtTime(0.1, t);
+    gain.gain.linearRampToValueAtTime(0.1, t + 0.16);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+    osc.start(t); osc.stop(t + 0.3);
+  } else if (type === 'error') {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(150, t + 0.2);
+    gain.gain.setValueAtTime(0.1, t);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+    osc.start(t); osc.stop(t + 0.2);
+  }
+}
+
+/* ================= 工具与验证 ================= */
+function getRandomNumber() {
+  return Math.floor(Math.random() * (CONFIG.maxNumber - CONFIG.minNumber + 1)) + CONFIG.minNumber;
+}
+
+// 任意运算能否凑出目标（用于判断盘面是否有解）
+function checkMath(a, b, target) {
+  if (a + b === target) return { eq: `${a} + ${b} = ${target}` };
+  if (a - b === target) return { eq: `${a} - ${b} = ${target}` };
+  if (b - a === target) return { eq: `${b} - ${a} = ${target}` };
+  if (a * b === target) return { eq: `${a} × ${b} = ${target}` };
+  if (b !== 0 && a % b === 0 && a / b === target) return { eq: `${a} ÷ ${b} = ${target}` };
+  if (a !== 0 && b % a === 0 && b / a === target) return { eq: `${b} ÷ ${a} = ${target}` };
+  return null;
+}
+
+// 用指定运算符校验两个数字
+function checkWithOp(a, b, op, target) {
+  if (op === '+') return a + b === target ? { eq: `${a} + ${b} = ${target}` } : null;
+  if (op === '−') {
+    if (a - b === target) return { eq: `${a} - ${b} = ${target}` };
+    if (b - a === target) return { eq: `${b} - ${a} = ${target}` };
+    return null;
+  }
+  if (op === '×') return a * b === target ? { eq: `${a} × ${b} = ${target}` } : null;
+  if (op === '÷') {
+    if (b !== 0 && a % b === 0 && a / b === target) return { eq: `${a} ÷ ${b} = ${target}` };
+    if (a !== 0 && b % a === 0 && b / a === target) return { eq: `${b} ÷ ${a} = ${target}` };
+    return null;
+  }
+  return null;
+}
+
+// 路径检测：横 / 竖 / 斜，中间不能有数字
+function isPathClear(r1, c1, r2, c2) {
+  if (r1 === r2) {
+    const minC = Math.min(c1, c2), maxC = Math.max(c1, c2);
+    for (let c = minC + 1; c < maxC; c++) if (grid[r1][c] !== null) return false;
+    return true;
+  }
+  if (c1 === c2) {
+    const minR = Math.min(r1, r2), maxR = Math.max(r1, r2);
+    for (let r = minR + 1; r < maxR; r++) if (grid[r][c1] !== null) return false;
+    return true;
+  }
+  if (Math.abs(r1 - r2) === Math.abs(c1 - c2)) {
+    const dr = r2 > r1 ? 1 : -1, dc = c2 > c1 ? 1 : -1;
+    let currR = r1 + dr, currC = c1 + dc;
+    while (currR !== r2 && currC !== c2) {
+      if (grid[currR][currC] !== null) return false;
+      currR += dr; currC += dc;
+    }
+    return true;
+  }
+  return false;
+}
+
+// 收集盘面上所有「可连线且能算出目标范围内结果」的解
+function collectSolutions() {
+  const cells = [];
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < CONFIG.cols; c++) {
+      if (grid[r][c] !== null) cells.push({ r, c, val: grid[r][c] });
+    }
+  }
+
+  const sols = [];
+  for (let i = 0; i < cells.length; i++) {
+    for (let j = i + 1; j < cells.length; j++) {
+      const A = cells[i], B = cells[j];
+      if (!isPathClear(A.r, A.c, B.r, B.c)) continue;
+      const a = A.val, b = B.val;
+
+      const candidates = [
+        { op: '+', result: a + b },
+        { op: '−', result: a - b },
+        { op: '−', result: b - a },
+        { op: '×', result: a * b }
+      ];
+      if (b !== 0 && a % b === 0) candidates.push({ op: '÷', result: a / b });
+      if (a !== 0 && b % a === 0) candidates.push({ op: '÷', result: b / a });
+
+      for (const cand of candidates) {
+        if (cand.result >= CONFIG.minTarget && cand.result <= CONFIG.maxTarget) {
+          sols.push({ ...cand, a, b, r1: A.r, c1: A.c, r2: B.r, c2: B.c });
+        }
+      }
+    }
+  }
+  return sols;
+}
+
+// 判断当前盘面 + 当前目标是否还有解
+function hasAvailableMoves() {
+  const cells = [];
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < CONFIG.cols; c++) {
+      if (grid[r][c] !== null) cells.push({ r, c, val: grid[r][c] });
+    }
+  }
+  for (let i = 0; i < cells.length; i++) {
+    for (let j = i + 1; j < cells.length; j++) {
+      const a = cells[i], b = cells[j];
+      if (checkMath(a.val, b.val, targetValue) && isPathClear(a.r, a.c, b.r, b.c)) return true;
+    }
+  }
+  return false;
+}
+
+/* ================= 算式填空区逻辑 ================= */
+const OPS = ['+', '−', '×', '÷'];
+let currentOp = '+';
+
+function setOp(op) {
+  currentOp = op;
+  document.getElementById('eqOp').textContent = op;
+}
+
+function cycleOp() {
+  const idx = OPS.indexOf(currentOp);
+  setOp(OPS[(idx + 1) % OPS.length]);
+  playSound('click');
+}
+
+function fillEqBox(slot, value) {
+  const el = document.getElementById(slot === 'a' ? 'eqA' : 'eqB');
+  el.textContent = value;
+  el.classList.remove('placeholder');
+  el.classList.add('filled');
+}
+
+function clearEqBoxes() {
+  ['eqA', 'eqB'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = '?';
+    el.classList.remove('filled');
+    el.classList.add('placeholder');
+  });
+}
+
+function updateEqResult() {
+  document.getElementById('eqResult').textContent = targetValue;
+}
+
+/* ================= 初始化与生成 ================= */
+
+// 目标值一定是盘面中真实存在的一个解，保证"题目在题目内容里能找到答案"
+function pickTargetFromGrid() {
+  const sols = collectSolutions();
+  if (sols.length === 0) return false;
+  const sol = sols[Math.floor(Math.random() * sols.length)];
+  targetValue = sol.result;
+  updateTargetDisplay();
+  return true;
+}
+
+function updateTargetDisplay() {
+  const el = document.getElementById('targetVal');
+  el.textContent = targetValue;
+  el.classList.remove('pop-anim');
+  void el.offsetWidth; // 触发重绘
+  el.classList.add('pop-anim');
+  updateEqResult();
+}
+
+// 生成盘面，并保证至少存在一个合法解
+function generateBoard() {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    grid = [];
+    for (let r = 0; r < CONFIG.initialRows; r++) {
+      const row = [];
+      for (let c = 0; c < CONFIG.cols; c++) row.push(getRandomNumber());
+      grid.push(row);
+    }
+    if (collectSolutions().length > 0) return;
+  }
+  // 极端兜底：强制放入一对能算出目标范围内结果的数字
+  grid[0][0] = 2;
+  grid[0][1] = 3;
+}
+
+function initGame() {
+  score = 0;
+  selectedCell = null;
+  isAnimating = false;
+
+  generateBoard();
+  if (!pickTargetFromGrid()) targetValue = 3; // 理论上不会触发
+
+  renderGrid();
+  updateHUD();
+  clearEqBoxes();
+  setOp('+');
+  updateEqResult();
+  showMsg("点击两个数字凑出目标（数字 1~10）", false);
+  startTimer();
+  gameActive = true;
+}
+
+/* ================= 渲染与交互 ================= */
+const gridEl = document.getElementById('grid');
+
+function renderGrid() {
+  gridEl.style.gridTemplateColumns = `repeat(${CONFIG.cols}, 1fr)`;
+  gridEl.innerHTML = '';
+
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < CONFIG.cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r; cell.dataset.c = c;
+
+      const val = grid[r][c];
+      if (val === null) cell.classList.add('matched');
+      else cell.textContent = val;
+
+      if (selectedCell && selectedCell.r === r && selectedCell.c === c) cell.classList.add('selected');
+
+      cell.addEventListener('click', () => handleCellClick(r, c, cell));
+      gridEl.appendChild(cell);
+    }
+  }
+}
+
+function showMsg(text, isError = false) {
+  const el = document.getElementById('msgBar');
+  el.textContent = text;
+  el.className = 'message-bar';
+  if (isError) {
+    el.classList.add('error');
+    setTimeout(() => el.classList.remove('error'), 300);
+  }
+}
+
+function handleCellClick(r, c, cellEl) {
+  if (isPaused) return;
+  if (isAnimating) return;
+  if (grid[r][c] === null) return;
+
+  initAudio();
+  playSound('click');
+
+  if (selectedCell && selectedCell.r === r && selectedCell.c === c) {
+    selectedCell = null;
+    cellEl.classList.remove('selected');
+    clearEqBoxes();
+    return;
+  }
+
+  if (!selectedCell) {
+    selectedCell = { r, c };
+    cellEl.classList.add('selected');
+    fillEqBox('a', grid[r][c]);
+    return;
+  }
+
+  const r1 = selectedCell.r, c1 = selectedCell.c;
+  const r2 = r, c2 = c;
+  const prevEl = gridEl.querySelector(`.cell[data-r="${r1}"][data-c="${c1}"]`);
+
+  // 1. 路径校验
+  if (!isPathClear(r1, c1, r2, c2)) {
+    playSound('error');
+    showMsg("连不上：必须在横/竖/斜线上，且中间不能有数字", true);
+    prevEl.classList.remove('selected');
+    cellEl.classList.add('error');
+    setTimeout(() => cellEl.classList.remove('error'), 300);
+    selectedCell = { r, c };
+    cellEl.classList.add('selected');
+    clearEqBoxes();
+    fillEqBox('a', grid[r][c]);
+    return;
+  }
+
+  // 2. 算式校验：优先当前运算符，其次自动匹配其他可行运算符
+  const a = grid[r1][c1];
+  const b = grid[r2][c2];
+  // 仅用玩家当前选定的运算符校验（运算方式只能由玩家点击符号更改）
+  const equation = checkWithOp(a, b, currentOp, targetValue);
+
+  if (equation) {
+    // 成功
+    isAnimating = true;
+    playSound('match');
+    showMsg(equation, false);
+
+    prevEl.classList.remove('selected');
+    prevEl.classList.add('pop');
+    cellEl.classList.add('pop');
+
+    setTimeout(() => {
+      grid[r1][c1] = null;
+      grid[r2][c2] = null;
+      selectedCell = null;
+
+      prevEl.classList.remove('pop');
+      prevEl.classList.add('matched');
+      cellEl.classList.remove('pop');
+      cellEl.classList.add('matched');
+
+      score += 10;
+      updateHUD();
+      isAnimating = false;
+      clearEqBoxes();
+
+      checkGameState();
+    }, 300);
+
+  } else {
+    // 失败
+    playSound('error');
+    showMsg(`用 ${currentOp} 凑不出 ${targetValue}，可点击中间符号切换运算方式`, true);
+    prevEl.classList.remove('selected');
+    cellEl.classList.add('error');
+    setTimeout(() => cellEl.classList.remove('error'), 300);
+    selectedCell = { r, c };
+    cellEl.classList.add('selected');
+    clearEqBoxes();
+    fillEqBox('a', grid[r][c]);
+  }
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+tickTimer._lastSec = -1;
+function tickTimer() {
+  if (isPaused) return;
+  const sec = (Date.now() - startTime - pausedTotal) / 1000;
+  document.getElementById('timer').textContent = formatTime(sec);
+  // 进度条以限时（6 分钟）为满格基准
+  const pct = Math.min(100, (sec / CONFIG.timeLimit) * 100);
+  document.getElementById('timeBar').style.width = pct + '%';
+
+  // 每秒兜底：若已陷入无解，自动换目标（仅在未暂停/非动画时）
+  if (gameActive && !isAnimating && Math.floor(sec) !== tickTimer._lastSec) {
+    tickTimer._lastSec = Math.floor(sec);
+    autoFixTargetIfStuck();
+  }
+
+  // 超时判定：游戏仍在进行且用满时限，立即结束
+  if (gameActive && sec >= CONFIG.timeLimit) {
+    gameActive = false;
+    onTimeout();
+  }
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  startTime = Date.now();
+  finalElapsed = 0;
+  isPaused = false;
+  pausedTotal = 0;
+  document.getElementById('timer').textContent = '00:00';
+  document.getElementById('timeBar').style.width = '0%';
+  timerInterval = setInterval(tickTimer, 200);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  const wasPaused = isPaused;
+  isPaused = false;
+  if (wasPaused && pauseStart) pausedTotal += Date.now() - pauseStart;
+  if (startTime) finalElapsed = (Date.now() - startTime - pausedTotal) / 1000;
+  tickTimer();
+}
+
+// 超时结束：停止计时并弹出结算页
+function onTimeout() {
+  stopTimer();
+
+  let remaining = 0;
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < CONFIG.cols; c++)
+      if (grid[r][c] !== null) remaining++;
+
+  const mmss = formatTime(CONFIG.timeLimit);
+  const desc =
+    '叮——<b style="color:#ff4d79">' + mmss + '</b> 时间到！<br>' +
+    '本局你一共拿到了 <b style="color:#ff4d79">' + score + '</b> 分，' +
+    '盘面上还剩下 <b style="color:#ff4d79">' + remaining + '</b> 个数字没能消除。<br>' +
+    '距离全部清空只差一点点，再挑战一次，争取在 6 分钟内干掉所有数字吧！';
+
+  showModal('⏰ 时间到', desc, '再来一局');
+}
+
+function updateHUD() {
+  document.getElementById('score').textContent = score;
+  let remaining = 0;
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < CONFIG.cols; c++)
+      if (grid[r][c] !== null) remaining++;
+  document.getElementById('status').textContent = remaining;
+}
+
+function checkGameState() {
+  // 是否全清空
+  let hasNumber = false;
+  for (let r = 0; r < grid.length; r++)
+    for (let c = 0; c < CONFIG.cols; c++)
+      if (grid[r][c] !== null) hasNumber = true;
+
+  if (!hasNumber) {
+    gameActive = false;
+    stopTimer();
+    const used = formatTime(Math.floor(finalElapsed));
+    showModal('🎉 清空获胜', `太棒了！你清空了所有数字，用时 <b style="color:#ff4d79">${used}</b>，获得 ${score} 分！`);
+    return;
+  }
+
+  // 当前目标无解 → 自动换一个盘面上真实存在的目标
+  autoFixTargetIfStuck();
+}
+
+// 统一兜底：若当前目标在盘面已凑不出，则自动换成一个真实可解的目标
+function autoFixTargetIfStuck() {
+  if (isAnimating) return false;
+  if (hasAvailableMoves()) return false;
+  let old = targetValue;
+  for (let i = 0; i < 300; i++) {
+    if (pickTargetFromGrid() && targetValue !== old && hasAvailableMoves()) {
+      showMsg(`目标 ${old} 已无法连线凑出，自动更换为 ${targetValue}`, false);
+      return true;
+    }
+  }
+  // 极端：盘面已无任何可连线配对
+  showMsg("盘面已无连线可凑，请点击 + 增加数字", true);
+  return false;
+}
+
+function changeTarget(isAuto = false) {
+  if (isAnimating) return;
+  if (!isAuto) playSound('click');
+
+  if (!pickTargetFromGrid()) {
+    showMsg("当前棋盘无解，请点击 + 增加数字", true);
+    return;
+  }
+  if (!isAuto) showMsg("目标已更换，请继续配对", false);
+}
+
+function showModal(title, desc, btnText = '重新开始') {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = `<p>${desc}</p>`;
+
+  const btn = document.getElementById('restartBtn');
+  btn.textContent = btnText;
+  btn.onclick = () => {
+    document.getElementById('overlay').classList.remove('active');
+    initGame();
+  };
+
+  document.getElementById('overlay').classList.add('active');
+}
+
+/* ================= 按钮事件 ================= */
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  if (isPaused) return;
+  if (isAnimating) return;
+  if (grid.length >= CONFIG.maxRows) {
+    showMsg("已经加满啦！", true);
+    return;
+  }
+
+  initAudio();
+  playSound('click');
+
+  const newRow = [];
+  for (let c = 0; c < CONFIG.cols; c++) newRow.push(getRandomNumber());
+  grid.push(newRow);
+
+  renderGrid();
+  updateHUD();
+
+  if (!hasAvailableMoves()) {
+    autoFixTargetIfStuck();
+  } else {
+    showMsg("已增加一行数字", false);
+  }
+});
+
+document.getElementById('eqOp').addEventListener('click', cycleOp);
+document.getElementById('changeTargetBtn').addEventListener('click', () => changeTarget(false));
+
+/* ================= 暂停功能 ================= */
+function pauseGame() {
+  if (!gameActive || isPaused) return;
+  isPaused = true;
+  pauseStart = Date.now();
+  const cur = (Date.now() - startTime - pausedTotal) / 1000;
+  document.getElementById('pauseMsg').innerHTML =
+    '当前用时：<b style="color:#ff4d79">' + formatTime(Math.floor(cur)) + '</b>';
+  document.getElementById('pauseOverlay').classList.add('active');
+}
+
+function resumeGame() {
+  if (!isPaused) return;
+  pausedTotal += Date.now() - pauseStart;
+  isPaused = false;
+  document.getElementById('pauseOverlay').classList.remove('active');
+}
+
+document.getElementById('pauseBtn').addEventListener('click', pauseGame);
+document.getElementById('resumeBtn').addEventListener('click', resumeGame);
+document.getElementById('restartPauseBtn').addEventListener('click', () => {
+  document.getElementById('pauseOverlay').classList.remove('active');
+  isPaused = false;
+  pausedTotal = 0;
+  initGame();
+});
+
+// 启动：先显示规则弹窗，玩家点击“开始游戏”后初始化
+window.onload = () => {
+  document.getElementById('restartBtn').onclick = () => {
+    document.getElementById('overlay').classList.remove('active');
+    initGame();
+  };
+};
+</script>
+</body>
+</html>
