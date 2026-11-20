@@ -309,11 +309,14 @@ let pauseStart = 0;       // 本次暂停起始时刻(ms)
 
 /* ================= 音效合成 ================= */
 function initAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  } catch (e) { audioCtx = null; }
 }
 function playSound(type) {
+  try {
   if (!audioCtx) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const t = audioCtx.currentTime;
@@ -344,6 +347,7 @@ function playSound(type) {
     gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
     osc.start(t); osc.stop(t + 0.2);
   }
+  } catch (e) { /* 忽略音频异常，不影响玩法 */ }
 }
 
 /* ================= 工具与验证 ================= */
@@ -353,28 +357,28 @@ function getRandomNumber() {
 
 // 任意运算能否凑出目标（用于判断盘面是否有解）
 function checkMath(a, b, target) {
-  if (a + b === target) return { eq: `${a} + ${b} = ${target}` };
-  if (a - b === target) return { eq: `${a} - ${b} = ${target}` };
-  if (b - a === target) return { eq: `${b} - ${a} = ${target}` };
-  if (a * b === target) return { eq: `${a} × ${b} = ${target}` };
-  if (b !== 0 && a % b === 0 && a / b === target) return { eq: `${a} ÷ ${b} = ${target}` };
-  if (a !== 0 && b % a === 0 && b / a === target) return { eq: `${b} ÷ ${a} = ${target}` };
+  // 返回可读算式字符串或 null；调用处只做真值判断，不再取出对象字段
+  if (a + b === target) return `${a} + ${b} = ${target}`;
+  if (a - b === target) return `${a} - ${b} = ${target}`;
+  if (b - a === target) return `${b} - ${a} = ${target}`;
+  if (a * b === target) return `${a} × ${b} = ${target}`;
+  if (b !== 0 && a % b === 0 && a / b === target) return `${a} ÷ ${b} = ${target}`;
+  if (a !== 0 && b % a === 0 && b / a === target) return `${b} ÷ ${a} = ${target}`;
   return null;
 }
 
 // 用指定运算符校验两个数字
 function checkWithOp(a, b, op, target) {
-  if (op === '+') return a + b === target ? { eq: `${a} + ${b} = ${target}` } : null;
+  // 成功返回可读的算式字符串，失败返回 null（绝不返回对象，避免页面显示 [object Object]）
+  if (op === '+') return a + b === target ? `${a} + ${b} = ${target}` : null;
   if (op === '−') {
-    if (a - b === target) return { eq: `${a} - ${b} = ${target}` };
-    if (b - a === target) return { eq: `${b} - ${a} = ${target}` };
-    return null;
+    // 严格按点击顺序：先点(a)为被减数，后点(b)为减数
+    return a - b === target ? `${a} - ${b} = ${target}` : null;
   }
-  if (op === '×') return a * b === target ? { eq: `${a} × ${b} = ${target}` } : null;
+  if (op === '×') return a * b === target ? `${a} × ${b} = ${target}` : null;
   if (op === '÷') {
-    if (b !== 0 && a % b === 0 && a / b === target) return { eq: `${a} ÷ ${b} = ${target}` };
-    if (a !== 0 && b % a === 0 && b / a === target) return { eq: `${b} ÷ ${a} = ${target}` };
-    return null;
+    // 严格按点击顺序：先点(a)为被除数，后点(b)为除数，且需整除
+    return (b !== 0 && a % b === 0 && a / b === target) ? `${a} ÷ ${b} = ${target}` : null;
   }
   return null;
 }
@@ -572,7 +576,12 @@ function renderGrid() {
 
 function showMsg(text, isError = false) {
   const el = document.getElementById('msgBar');
-  el.textContent = text;
+  // 类型守卫：万一传入的是对象/数字，统一转成可读文本，杜绝 [object Object]
+  let safe = text;
+  if (safe === null || safe === undefined) safe = '';
+  else if (typeof safe === 'object') safe = (safe.eq || safe.text || safe.msg || '');
+  else safe = String(safe);
+  el.textContent = safe;
   el.className = 'message-bar';
   if (isError) {
     el.classList.add('error');
@@ -657,7 +666,7 @@ function handleCellClick(r, c, cellEl) {
   } else {
     // 失败
     playSound('error');
-    showMsg(`用 ${currentOp} 凑不出 ${targetValue}，可点击中间符号切换运算方式`, true);
+    showMsg(`凑不出 ${targetValue}：用 ${currentOp} 时先点的数是被${currentOp==='÷'?'除':'减'}数，注意先后顺序`, true);
     prevEl.classList.remove('selected');
     cellEl.classList.add('error');
     setTimeout(() => cellEl.classList.remove('error'), 300);
@@ -702,6 +711,20 @@ function startTimer() {
   isPaused = false;
   pausedTotal = 0;
   document.getElementById('timer').textContent = '00:00';
+  // 全局自检：清理可能残留的异常文本节点
+  (function scrubBadText(){
+    try{
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let n;
+      while((n = walker.nextNode())){
+        const v = n.nodeValue;
+        if(v && (v.indexOf('[object Object]') !== -1 || v.trim() === 'undefined' || v.trim() === 'NaN')){
+          n.nodeValue = '';
+        }
+      }
+    }catch(e){}
+  })();
+  
   document.getElementById('timeBar').style.width = '0%';
   timerInterval = setInterval(tickTimer, 200);
 }
@@ -846,26 +869,4 @@ function pauseGame() {
 function resumeGame() {
   if (!isPaused) return;
   pausedTotal += Date.now() - pauseStart;
-  isPaused = false;
-  document.getElementById('pauseOverlay').classList.remove('active');
-}
-
-document.getElementById('pauseBtn').addEventListener('click', pauseGame);
-document.getElementById('resumeBtn').addEventListener('click', resumeGame);
-document.getElementById('restartPauseBtn').addEventListener('click', () => {
-  document.getElementById('pauseOverlay').classList.remove('active');
-  isPaused = false;
-  pausedTotal = 0;
-  initGame();
-});
-
-// 启动：先显示规则弹窗，玩家点击“开始游戏”后初始化
-window.onload = () => {
-  document.getElementById('restartBtn').onclick = () => {
-    document.getElementById('overlay').classList.remove('active');
-    initGame();
-  };
-};
-</script>
-</body>
-</html>
+  i
